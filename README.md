@@ -1,7 +1,8 @@
 # pytube3
 
 ## Table of Contents
-  * [Intention of this fork](#Intention of this fork)
+  
+  * [Intention of this fork](#intention-of-this-fork)
   * [Installation](#installation)
   * [Quick start](#quick-start)
   * [Features](#features)
@@ -20,20 +21,6 @@ Download using pip via git.
 $ pip install git+git://github.com/tooxo/pytube.git --upgrade
 ```
 (Mac/homebrew users may need to use ``pip3``)
-
-
-## Quick start
-```
- >>> from pytube import YouTube
- >>> YouTube('https://youtu.be/9bZkp7q19f0').streams.get_highest_resolution().download()
- >>>
- >>> yt = YouTube('http://youtube.com/watch?v=9bZkp7q19f0')
- >>> yt.streams
-  ... .filter(progressive=True, file_extension='mp4')
-  ... .order_by('resolution')[-1]
-  ... .download()
-```
-A GUI frontend for pytube3 is available at [YouTubeDownload](https://github.com/YouTubeDownload/YouTubeDownload)
 
 ## Features
   * Support for Both Progressive & DASH Streams

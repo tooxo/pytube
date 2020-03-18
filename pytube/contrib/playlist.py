@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
 """Module to download a complete playlist from a youtube channel."""
-
 import json
 import logging
 import re
 from datetime import date, datetime
-from typing import List, Optional, Iterable, Union
+from typing import List, Optional, Union, Tuple, AsyncGenerator
 from urllib.parse import parse_qs
 from collections.abc import Sequence
 
@@ -37,6 +36,9 @@ class Playlist(Sequence):
             ).date()
 
         self._video_regex = re.compile(r"href=\"(/watch\?v=[\w-]*)")
+        self._video_regex_2 = re.compile(r"<a[A-z0-9 \"-=]+href=\"(/watch\?v=[A-z0-9]{11})[A-z0-9 \"-=]+>"
+                                         r"[\s]+([^<\n]+)[\s]+</a>")
+        self._video_urls = []
 
     @classmethod
     async def create(cls, url: str):
@@ -50,7 +52,9 @@ class Playlist(Sequence):
 
         playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
         html = await request.get(playlist_url)
-        return cls(html, playlist_id, playlist_url)
+        self = cls(html, playlist_id, playlist_url)
+        await self._fill_video_urls()
+        return self
 
     @staticmethod
     def _find_load_more_url(req: str) -> Optional[str]:
@@ -65,30 +69,13 @@ class Playlist(Sequence):
 
         return None
 
-    @deprecated(
-        "This function will be removed in the future, please use .video_urls"
-    )
-    def parse_links(self) -> List[str]:  # pragma: no cover
-        """ Deprecated function for returning list of URLs
-
-        :return: List[str]
-        """
-        return self.video_urls
-
-    def _paginate(
-        self, until_watch_id: Optional[str] = None
-    ) -> Iterable[List[str]]:
+    async def _paginate(
+        self
+    ) -> AsyncGenerator[List[Tuple[str, str]], None]:
         """Parse the video links from the page source, yields the /watch?v= part from video link
         """
         req = self.html
         videos_urls = self._extract_videos(req)
-        if until_watch_id:
-            try:
-                trim_index = videos_urls.index(f"/watch?v={until_watch_id}")
-                yield videos_urls[:trim_index]
-                return
-            except ValueError:
-                pass
         yield videos_urls
 
         # The above only returns 100 or fewer links
@@ -97,7 +84,7 @@ class Playlist(Sequence):
 
         while load_more_url:  # there is an url found
             logger.debug("load more url: %s", load_more_url)
-            req = request.get(load_more_url)
+            req = await request.get(load_more_url)
             load_more = json.loads(req)
             try:
                 html = load_more["content_html"]
@@ -105,13 +92,6 @@ class Playlist(Sequence):
                 logger.debug("Could not find content_html")
                 return
             videos_urls = self._extract_videos(html)
-            if until_watch_id:
-                try:
-                    trim_index = videos_urls.index(f"/watch?v={until_watch_id}")
-                    yield videos_urls[:trim_index]
-                    return
-                except ValueError:
-                    pass
             yield videos_urls
 
             load_more_url = self._find_load_more_url(
@@ -120,45 +100,32 @@ class Playlist(Sequence):
 
         return
 
-    def _extract_videos(self, html: str) -> List[str]:
-        return uniqueify(self._video_regex.findall(html))
+    def _extract_videos(self, html: str) -> List[Tuple[str, str]]:
+        matches = self._video_regex_2.findall(html)
+        _list: List[Tuple[str, str]] = []
+        for match in matches:
+            _list.append((self._video_url(match[0]), match[1]))
+        return uniqueify(_list)
 
-    def trimmed(self, video_id: str) -> Iterable[str]:
-        """Retrieve a list of YouTube video URLs trimmed at the given video ID
-
-        i.e. if the playlist has video IDs 1,2,3,4 calling trimmed(3) returns [1,2]
-        :type video_id: str
-            video ID to trim the returned list of playlist URLs at
-        :rtype: List[str]
-        :returns:
-            List of video URLs from the playlist trimmed at the given ID
-        """
-        for page in self._paginate(until_watch_id=video_id):
-            yield from (self._video_url(watch_path) for watch_path in page)
-
-    @property  # type: ignore
-    @cache
-    def video_urls(self) -> List[str]:
+    async def _fill_video_urls(self) -> None:
         """Complete links of all the videos in playlist
 
         :rtype: List[str]
         :returns: List of video URLs
         """
-        return [
-            self._video_url(video)
-            for page in list(self._paginate())
-            for video in page
-        ]
+        async for page in self._paginate():
+            for video in page:
+                self._video_urls.append(
+                    video
+                )
 
     @property
-    def videos(self) -> Iterable[YouTube]:
-        """Yields YouTube objects of videos in this playlist
-
-        :Yields: YouTube
+    def video_urls(self) -> List[Tuple[str, str]]:
+        """Return all video urls
         """
-        yield from (YouTube(url) for url in self.video_urls)
+        return self._video_urls
 
-    def __getitem__(self, i: Union[slice, int]) -> Union[str, List[str]]:
+    def __getitem__(self, i: Union[slice, int]) -> Union[Tuple[str, str], List[Tuple[str, str]]]:
         return self.video_urls[i]
 
     def __len__(self) -> int:
@@ -166,17 +133,6 @@ class Playlist(Sequence):
 
     def __repr__(self) -> str:
         return f"{self.video_urls}"
-
-    @deprecated(
-        "This call is unnecessary, you can directly access .video_urls or .videos"
-    )
-    def populate_video_urls(self) -> List[str]:  # pragma: no cover
-        """Complete links of all the videos in playlist
-
-        :rtype: List[str]
-        :returns: List of video URLs
-        """
-        return self.video_urls
 
     @deprecated("This function will be removed in the future.")
     def _path_num_prefix_generator(self, reverse=False):  # pragma: no cover
