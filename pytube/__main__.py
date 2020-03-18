@@ -13,15 +13,15 @@ import logging
 from typing import Optional, Dict, List
 from urllib.parse import parse_qsl
 from html import unescape
-
-from pytube import Caption
-from pytube import CaptionQuery
 from pytube import extract
 from pytube import request
 from pytube import Stream
 from pytube import StreamQuery
-from pytube.extract import apply_descrambler, apply_signature, get_ytplayer_config
-from pytube.helpers import install_proxy
+from pytube.extract import (
+    apply_descrambler,
+    apply_signature,
+    get_ytplayer_config,
+)
 from pytube.exceptions import VideoUnavailable
 from pytube.monostate import OnProgress, OnComplete, Monostate
 
@@ -33,35 +33,26 @@ class YouTube:
 
     def __init__(
         self,
-        url: str,
+        url,
         defer_prefetch_init: bool = False,
         on_progress_callback: Optional[OnProgress] = None,
         on_complete_callback: Optional[OnComplete] = None,
-        proxies: Dict[str, str] = None,
     ):
-        """Construct a :class:`YouTube <YouTube>`.
+        """Dont construct the YouTube class directly. Use create()"""
 
-        :param str url:
-            A valid YouTube watch URL.
-        :param bool defer_prefetch_init:
-            Defers executing any network requests.
-        :param func on_progress_callback:
-            (Optional) User defined callback function for stream download
-            progress events.
-        :param func on_complete_callback:
-            (Optional) User defined callback function for stream download
-            complete events.
-
-        """
         self.js: Optional[str] = None  # js fetched by js_url
-        self.js_url: Optional[str] = None  # the url to the js, parsed from watch html
+        self.js_url: Optional[
+            str
+        ] = None  # the url to the js, parsed from watch html
 
         # note: vid_info may eventually be removed. It sounds like it once had
         # additional formats, but that doesn't appear to still be the case.
 
         # the url to vid info, parsed from watch html
         self.vid_info_url: Optional[str] = None
-        self.vid_info_raw: Optional[str] = None  # content fetched by vid_info_url
+        self.vid_info_raw: Optional[
+            str
+        ] = None  # content fetched by vid_info_url
         self.vid_info: Optional[Dict] = None  # parsed content of vid_info_raw
 
         self.watch_html: Optional[str] = None  # the html of /watch?v=<video_id>
@@ -84,14 +75,35 @@ class YouTube:
             on_progress=on_progress_callback, on_complete=on_complete_callback
         )
 
-        if proxies:
-            install_proxy(proxies)
+    @classmethod
+    async def create(
+        cls,
+        url,
+        defer_prefetch_init: bool = False,
+        on_progress_callback: Optional[OnProgress] = None,
+        on_complete_callback: Optional[OnComplete] = None,
+    ):
+        """Create a new YouTube class object.
 
+        :param str url:
+            A valid YouTube watch URL.
+        :param bool defer_prefetch_init:
+            Defers executing any network requests.
+        :param func on_progress_callback:
+            (Optional) User defined callback function for stream download
+            progress events.
+        :param func on_complete_callback:
+            (Optional) User defined callback function for stream download
+            complete events.
+
+        """
+        self = cls(url, defer_prefetch_init, on_progress_callback, on_complete_callback)
         if not defer_prefetch_init:
-            self.prefetch()
-            self.descramble()
+            await self.prefetch()
+            await self.descramble()
+        return self
 
-    def descramble(self) -> None:
+    async def descramble(self) -> None:
         """Descramble the stream data and build Stream instances.
 
         The initialization process takes advantage of Python's
@@ -109,11 +121,15 @@ class YouTube:
             self.player_config_args = self.vid_info
         else:
             assert self.watch_html is not None
-            self.player_config_args = get_ytplayer_config(self.watch_html)["args"]
+            self.player_config_args = get_ytplayer_config(self.watch_html)[
+                "args"
+            ]
 
             # Fix for KeyError: 'title' issue #434
             if "title" not in self.player_config_args:  # type: ignore
-                i_start = self.watch_html.lower().index("<title>") + len("<title>")
+                i_start = self.watch_html.lower().index("<title>") + len(
+                    "<title>"
+                )
                 i_end = self.watch_html.lower().index("</title>")
                 title = self.watch_html[i_start:i_end].strip()
                 index = title.lower().rfind(" - youtube")
@@ -133,9 +149,9 @@ class YouTube:
 
             if not self.js:
                 if not self.embed_html:
-                    self.embed_html = request.get(url=self.embed_url)
+                    self.embed_html = await request.get(url=self.embed_url)
                 self.js_url = extract.js_url(self.embed_html)
-                self.js = request.get(self.js_url)
+                self.js = await request.get(self.js_url)
 
             apply_signature(self.player_config_args, fmt, self.js)
 
@@ -143,14 +159,16 @@ class YouTube:
             self.initialize_stream_objects(fmt)
 
         # load the player_response object (contains subtitle information)
-        self.player_response = json.loads(self.player_config_args["player_response"])
+        self.player_response = json.loads(
+            self.player_config_args["player_response"]
+        )
         del self.player_config_args["player_response"]
         self.stream_monostate.title = self.title
         self.stream_monostate.duration = self.length
 
         logger.info("init finished successfully")
 
-    def prefetch(self) -> None:
+    async def prefetch(self) -> None:
         """Eagerly download all necessary data.
 
         Eagerly executes all necessary network requests so all other
@@ -159,17 +177,20 @@ class YouTube:
 
         :rtype: None
         """
-        self.watch_html = request.get(url=self.watch_url)
+        self.watch_html = await request.get(url=self.watch_url)
         if self.watch_html is None:
             raise VideoUnavailable(video_id=self.video_id)
         self.age_restricted = extract.is_age_restricted(self.watch_html)
 
-        if not self.age_restricted and "This video is private" in self.watch_html:
+        if (
+            not self.age_restricted
+            and "This video is private" in self.watch_html
+        ):
             raise VideoUnavailable(video_id=self.video_id)
 
         if self.age_restricted:
             if not self.embed_html:
-                self.embed_html = request.get(url=self.embed_url)
+                self.embed_html = await request.get(url=self.embed_url)
             self.vid_info_url = extract.video_info_url_age_restricted(
                 self.video_id, self.watch_url
             )
@@ -178,10 +199,10 @@ class YouTube:
                 video_id=self.video_id, watch_url=self.watch_url
             )
 
-        self.vid_info_raw = request.get(self.vid_info_url)
+        self.vid_info_raw = await request.get(self.vid_info_url)
         if not self.age_restricted:
             self.js_url = extract.js_url(self.watch_html)
-            self.js = request.get(self.js_url)
+            self.js = await request.get(self.js_url)
 
     def initialize_stream_objects(self, fmt: str) -> None:
         """Convert manifest data to instances of :class:`Stream <Stream>`.
@@ -205,27 +226,6 @@ class YouTube:
                 monostate=self.stream_monostate,
             )
             self.fmt_streams.append(video)
-
-    @property
-    def caption_tracks(self) -> List[Caption]:
-        """Get a list of :class:`Caption <Caption>`.
-
-        :rtype: List[Caption]
-        """
-        raw_tracks = (
-            self.player_response.get("captions", {})
-            .get("playerCaptionsTracklistRenderer", {})
-            .get("captionTracks", [])
-        )
-        return [Caption(track) for track in raw_tracks]
-
-    @property
-    def captions(self) -> CaptionQuery:
-        """Interface to query caption tracks.
-
-        :rtype: :class:`CaptionQuery <CaptionQuery>`.
-        """
-        return CaptionQuery(self.caption_tracks)
 
     @property
     def streams(self) -> StreamQuery:
@@ -293,7 +293,11 @@ class YouTube:
         """
         return int(
             self.player_config_args.get("length_seconds")
-            or (self.player_response.get("videoDetails", {}).get("lengthSeconds"))
+            or (
+                self.player_response.get("videoDetails", {}).get(
+                    "lengthSeconds"
+                )
+            )
         )
 
     @property
@@ -303,14 +307,18 @@ class YouTube:
         :rtype: str
 
         """
-        return int(self.player_response.get("videoDetails", {}).get("viewCount"))
+        return int(
+            self.player_response.get("videoDetails", {}).get("viewCount")
+        )
 
     @property
     def author(self) -> str:
         """Get the video author.
         :rtype: str
         """
-        return self.player_response.get("videoDetails", {}).get("author", "unknown")
+        return self.player_response.get("videoDetails", {}).get(
+            "author", "unknown"
+        )
 
     def register_on_progress_callback(self, func: OnProgress):
         """Register a download progress callback function post initialization.

@@ -13,16 +13,16 @@ with codecs.open(os.path.join(here, "README.md"), encoding="utf-8") as fh:
 with open(os.path.join(here, "pytube", "version.py")) as fp:
     exec(fp.read())
 
+# noinspection PyUnresolvedReferences
 setup(
     name="pytube3",
     version=__version__,  # noqa: F821
     author="Nick Ficano, Harold Martin",
     author_email="nficano@gmail.com, harold.martin@gmail.com",
     packages=["pytube", "pytube.contrib"],
-    package_data={"": ["LICENSE"],},
+    package_data={"": ["LICENSE"]},
     url="https://github.com/hbmartin/pytube3",
     license="MIT",
-    entry_points={"console_scripts": ["pytube3 = pytube.cli:main",],},
     install_requires=["typing_extensions"],
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -44,7 +44,7 @@ setup(
         "Topic :: Terminals",
         "Topic :: Utilities",
     ],
-    description=("Python 3 library for downloading YouTube Videos."),
+    description="Python 3 library for downloading YouTube Videos.",
     include_package_data=True,
     long_description_content_type="text/markdown",
     long_description=long_description,
@@ -54,5 +54,5 @@ setup(
         "Bug Reports": "https://github.com/hbmartin/pytube3/issues",
         "Read the Docs": "https://pytube3.readthedocs.io/en/latest/?badge=latest",
     },
-    keywords=["youtube", "download", "video", "stream",],
+    keywords=["youtube", "download", "video", "stream"],
 )

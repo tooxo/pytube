@@ -1,30 +1,18 @@
 # -*- coding: utf-8 -*-
 
-"""Implements a simple wrapper around urlopen."""
+"""Implements a simple wrapper around aiohttp."""
 import logging
 from functools import lru_cache
-from http.client import HTTPResponse
 from typing import Iterable, Dict, Optional
-from urllib.request import Request
-from urllib.request import urlopen
+import aiohttp
 
 logger = logging.getLogger(__name__)
 
 
-def _execute_request(
-    url: str, method: Optional[str] = None, headers: Optional[Dict[str, str]] = None
-) -> HTTPResponse:
-    base_headers = {"User-Agent": "Mozilla/5.0"}
-    if headers:
-        base_headers.update(headers)
-    if url.lower().startswith("http"):
-        request = Request(url, headers=base_headers, method=method)
-    else:
-        raise ValueError("Invalid URL")
-    return urlopen(request)  # nosec
+base_headers = {"User-Agent": "Mozilla/5.0"}
 
 
-def get(url) -> str:
+async def get(url) -> str:
     """Send an http GET request.
 
     :param str url:
@@ -33,10 +21,11 @@ def get(url) -> str:
     :returns:
         UTF-8 encoded string of response
     """
-    return _execute_request(url).read().decode("utf-8")
+    async with aiohttp.request("GET", url) as res:
+        return (await res.read()).decode("utf-8")
 
 
-def stream(
+async def stream(
     url: str, chunk_size: int = 4096, range_size: int = 9437184
 ) -> Iterable[bytes]:
     """Read the response in chunks.
@@ -50,33 +39,37 @@ def stream(
     while downloaded < file_size:
         stop_pos = min(downloaded + range_size, file_size) - 1
         range_header = f"bytes={downloaded}-{stop_pos}"
-        response = _execute_request(url, method="GET", headers={"Range": range_header})
-        if file_size == range_size:
-            try:
-                content_range = response.info()["Content-Range"]
-                file_size = int(content_range.split("/")[1])
-            except (KeyError, IndexError, ValueError) as e:
-                logger.error(e)
-        while True:
-            chunk = response.read(chunk_size)
-            if not chunk:
-                break
-            downloaded += len(chunk)
-            yield chunk
+        headers = {
+            **base_headers,
+            "Range": range_header
+        }
+        async with aiohttp.request(method="GET", url=url, headers=headers) as res:
+            if file_size == range_size:
+                try:
+                    content_range = res.headers["Content-Range"]
+                    file_size = int(content_range.split("/")[1])
+                except (KeyError, IndexError, ValueError) as e:
+                    logger.error(e)
+            while True:
+                chunk = await res.content.read(chunk_size)
+                if not chunk:
+                    break
+                downloaded += len(chunk)
+                yield chunk
     return  # pylint: disable=R1711
 
 
 @lru_cache(maxsize=None)
-def filesize(url: str) -> int:
+async def filesize(url: str) -> int:
     """Fetch size in bytes of file at given URL
 
     :param str url: The URL to get the size of
     :returns: int: size in bytes of remote file
     """
-    return int(head(url)["content-length"])
+    return int((await head(url))["content-length"])
 
 
-def head(url: str) -> Dict:
+async def head(url: str) -> Dict:
     """Fetch headers returned http GET request.
 
     :param str url:
@@ -85,5 +78,6 @@ def head(url: str) -> Dict:
     :returns:
         dictionary of lowercase headers
     """
-    response_headers = _execute_request(url, method="HEAD").info()
-    return {k.lower(): v for k, v in response_headers.items()}
+    async with aiohttp.request("HEAD", url) as res:
+        response_headers = res.headers
+        return {k.lower(): v for k, v in response_headers.items()}

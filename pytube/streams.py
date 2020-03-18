@@ -135,7 +135,7 @@ class Stream:
         return video, audio
 
     @property
-    def filesize(self) -> int:
+    async def filesize(self) -> int:
         """File size of the media stream in bytes.
 
         :rtype: int
@@ -144,7 +144,7 @@ class Stream:
         """
         if self._filesize is None:
             self._filesize = request.filesize(self.url)
-        return self._filesize
+        return await self._filesize
 
     @property
     def title(self) -> str:
@@ -157,7 +157,7 @@ class Stream:
         return self._monostate.title or "Unknown YouTube Video Title"
 
     @property
-    def filesize_approx(self) -> int:
+    async def filesize_approx(self) -> int:
         """Get approximate filesize of the video
 
         Falls back to HTTP call if there is not sufficient information to approximate
@@ -169,7 +169,7 @@ class Stream:
             bits_in_byte = 8
             return int((self._monostate.duration * self.bitrate) / bits_in_byte)
 
-        return self.filesize
+        return await self.filesize
 
     @property
     def expiration(self) -> datetime:
@@ -187,7 +187,7 @@ class Stream:
         filename = safe_filename(self.title)
         return f"{filename}.{self.subtype}"
 
-    def download(
+    async def download(
         self,
         output_path: Optional[str] = None,
         filename: Optional[str] = None,
@@ -238,7 +238,7 @@ class Stream:
                 # reduce the (bytes) remainder by the length of the chunk.
                 bytes_remaining -= len(chunk)
                 # send to the on_progress callback.
-                self.on_progress(chunk, fh, bytes_remaining)
+                self.on_progress(chunk, fh, await bytes_remaining)
         self.on_complete(file_path)
         return file_path
 
@@ -259,7 +259,7 @@ class Stream:
     def exists_at_path(self, file_path: str) -> bool:
         return os.path.isfile(file_path) and os.path.getsize(file_path) == self.filesize
 
-    def stream_to_buffer(self, buffer: BinaryIO) -> None:
+    async def stream_to_buffer(self, buffer: BinaryIO) -> None:
         """Write the media stream to buffer
 
         :rtype: io.BytesIO buffer
@@ -273,7 +273,7 @@ class Stream:
             # reduce the (bytes) remainder by the length of the chunk.
             bytes_remaining -= len(chunk)
             # send to the on_progress callback.
-            self.on_progress(chunk, buffer, bytes_remaining)
+            self.on_progress(chunk, buffer, await bytes_remaining)
         self.on_complete(None)
 
     def on_progress(self, chunk: bytes, file_handler: BinaryIO, bytes_remaining: int):
