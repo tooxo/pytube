@@ -34,7 +34,6 @@ class YouTube:
     def __init__(
         self,
         url,
-        defer_prefetch_init: bool = False,
         on_progress_callback: Optional[OnProgress] = None,
         on_complete_callback: Optional[OnComplete] = None,
     ):
@@ -97,7 +96,7 @@ class YouTube:
             complete events.
 
         """
-        self = cls(url, defer_prefetch_init, on_progress_callback, on_complete_callback)
+        self = cls(url, on_progress_callback, on_complete_callback)
         if not defer_prefetch_init:
             await self.prefetch()
             await self.descramble()

@@ -36,8 +36,9 @@ class Playlist(Sequence):
             ).date()
 
         self._video_regex = re.compile(r"href=\"(/watch\?v=[\w-]*)")
-        self._video_regex_2 = re.compile(r"<a[A-z0-9 \"-=]+href=\"(/watch\?v=[A-z0-9]{11})[A-z0-9 \"-=]+>"
-                                         r"[\s]+([^<\n]+)[\s]+</a>")
+        self._video_regex_2 = re.compile(r"<a[A-z0-9 \"-=]+href=\"(/watch\?v="
+                                         r"[A-z0-9-_]{11})[A-z0-9 \"\-&_;=]+>"
+                                         r"[\s]+([^<\n]+)[\s]+(</a>)?")
         self._video_urls = []
 
     @classmethod
@@ -151,57 +152,6 @@ class Playlist(Sequence):
         else:
             start, stop, step = (1, len(self.video_urls) + 1, 1)
         return (str(i).zfill(digits) for i in range(start, stop, step))
-
-    @deprecated(
-        "This function will be removed in the future. Please iterate through .videos"
-    )
-    def download_all(
-        self,
-        download_path: Optional[str] = None,
-        prefix_number: bool = True,
-        reverse_numbering: bool = False,
-        resolution: str = "720p",
-    ) -> None:  # pragma: no cover
-        """Download all the videos in the the playlist.
-
-        :param download_path:
-            (optional) Output path for the playlist If one is not
-            specified, defaults to the current working directory.
-            This is passed along to the Stream objects.
-        :type download_path: str or None
-        :param prefix_number:
-            (optional) Automatically numbers playlists using the
-            _path_num_prefix_generator function.
-        :type prefix_number: bool
-        :param reverse_numbering:
-            (optional) Lets you number playlists in reverse, since some
-            playlists are ordered newest -> oldest.
-        :type reverse_numbering: bool
-        :param resolution:
-            Video resolution i.e. "720p", "480p", "360p", "240p", "144p"
-        :type resolution: str
-        """
-        logger.debug("total videos found: %d", len(self.video_urls))
-        logger.debug("starting download")
-
-        prefix_gen = self._path_num_prefix_generator(reverse_numbering)
-
-        for link in self.video_urls:
-            youtube = YouTube(link)
-            dl_stream = (
-                youtube.streams.get_by_resolution(resolution=resolution)
-                or youtube.streams.get_lowest_resolution()
-            )
-            assert dl_stream is not None
-
-            logger.debug("download path: %s", download_path)
-            if prefix_number:
-                prefix = next(prefix_gen)
-                logger.debug("file prefix is: %s", prefix)
-                dl_stream.download(download_path, filename_prefix=prefix)
-            else:
-                dl_stream.download(download_path)
-            logger.debug("download complete")
 
     @cache
     def title(self) -> Optional[str]:
