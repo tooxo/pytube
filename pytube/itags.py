@@ -2,6 +2,8 @@
 """This module contains a lookup table of YouTube's itag values."""
 from typing import Dict
 
+
+
 ITAGS = {
     5: ("240p", "64kbps"),
     6: ("270p", "64kbps"),

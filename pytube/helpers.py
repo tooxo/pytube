@@ -8,8 +8,6 @@ import re
 import warnings
 from typing import TypeVar, Callable, Optional, Dict, List, Any
 
-import aiohttp
-
 from pytube.exceptions import RegexMatchError
 
 logger = logging.getLogger(__name__)
@@ -37,51 +35,6 @@ def regex_search(pattern: str, string: str, group: int) -> str:
     logger.debug("matched regex search: %s", pattern)
 
     return results.group(group)
-
-
-def safe_filename(s: str, max_length: int = 255) -> str:
-    """Sanitize a string making it safe to use as a filename.
-
-    This function was based off the limitations outlined here:
-    https://en.wikipedia.org/wiki/Filename.
-
-    :param str s:
-        A string to make safe for use as a file name.
-    :param int max_length:
-        The maximum filename character length.
-    :rtype: str
-    :returns:
-        A sanitized string.
-    """
-    # Characters in range 0-31 (0x00-0x1F) are not allowed in ntfs filenames.
-    ntfs_characters = [chr(i) for i in range(0, 31)]
-    characters = [
-        r'"',
-        r"\#",
-        r"\$",
-        r"\%",
-        r"'",
-        r"\*",
-        r"\,",
-        r"\.",
-        r"\/",
-        r"\:",
-        r'"',
-        r"\;",
-        r"\<",
-        r"\>",
-        r"\?",
-        r"\\",
-        r"\^",
-        r"\|",
-        r"\~",
-        r"\\\\",
-    ]
-    pattern = "|".join(ntfs_characters + characters)
-    regex = re.compile(pattern, re.UNICODE)
-    filename = regex.sub("", s)
-    return filename[:max_length].rsplit(" ", 0)[0]
-
 
 def setup_logger(level: int = logging.ERROR):
     """Create a configured instance of logger.
@@ -134,26 +87,6 @@ def deprecated(reason: str) -> Callable:
         return new_func1
 
     return decorator
-
-
-def target_directory(output_path: Optional[str] = None) -> str:
-    """
-    Function for determining target directory of a download.
-    Returns an absolute path (if relative one given) or the current
-    path (if none given). Makes directory if it does not exist.
-
-    :type output_path: str
-        :rtype: str
-    :returns:
-        An absolute directory path as a string.
-    """
-    if output_path:
-        if not os.path.isabs(output_path):
-            output_path = os.path.join(os.getcwd(), output_path)
-    else:
-        output_path = os.getcwd()
-    os.makedirs(output_path, exist_ok=True)
-    return output_path
 
 
 def uniqueify(duped_list: List) -> List:

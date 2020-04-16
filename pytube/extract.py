@@ -197,6 +197,7 @@ def get_ytplayer_config(html: str) -> Any:
         if function_match:
             logger.debug("finished regex search, matched: %s", pattern)
             yt_player_config = function_match.group(1)
+            print(yt_player_config)
             return json.loads(yt_player_config)
 
     raise RegexMatchError(caller="get_ytplayer_config", pattern="config_patterns")
@@ -237,6 +238,8 @@ def apply_signature(config_args: Dict, fmt: str, js: str) -> None:
             if live_stream:
                 raise LiveStreamError("UNKNOWN")
         # 403 Forbidden fix.
+
+        print("A", json.dumps(stream))
         if "signature" in url or (
             "s" not in stream and ("&sig=" in url or "&lsig=" in url)
         ):
@@ -273,45 +276,47 @@ def apply_descrambler(stream_data: Dict, key: str) -> None:
     {'foo': [{'bar': '1', 'var': 'test'}, {'em': '5', 't': 'url encoded'}]}
 
     """
+
     otf_type = "FORMAT_STREAM_TYPE_OTF"
 
     if key == "url_encoded_fmt_stream_map" and not stream_data.get(
         "url_encoded_fmt_stream_map"
     ):
-        formats = json.loads(stream_data["player_response"])["streamingData"]["formats"]
-        formats.extend(
-            json.loads(stream_data["player_response"])["streamingData"][
-                "adaptiveFormats"
-            ]
-        )
+        formats = []
+        player_response = json.loads(stream_data["player_response"])
+        if "formats" in player_response["streamingData"] :
+            formats.extend(player_response["streamingData"]["formats"])
+        if "adaptiveFormats" in player_response["streamingData"]:
+            formats.extend(player_response["streamingData"]["adaptiveFormats"])
         try:
-            stream_data[key] = [
-                {
-                    "url": format_item["url"],
-                    "type": format_item["mimeType"],
-                    "quality": format_item["quality"],
-                    "itag": format_item["itag"],
-                    "bitrate": format_item.get("bitrate"),
-                    "is_otf": (format_item.get("type") == otf_type),
-                }
-                for format_item in formats
-            ]
+            stream_data[key] = []
+            for format_item in formats:
+                stream_data[key].append(
+                    {
+                        "url": format_item["url"],
+                        "type": format_item["mimeType"],
+                        "quality": format_item["quality"],
+                        "itag": format_item["itag"],
+                        "bitrate": format_item.get("bitrate"),
+                        "is_otf": (format_item.get("type") == otf_type),
+                    }
+                )
         except KeyError:
             cipher_url = [
                 parse_qs(formats[i]["cipher"]) for i, data in enumerate(formats)
             ]
-            stream_data[key] = [
-                {
-                    "url": cipher_url[i]["url"][0],
-                    "s": cipher_url[i]["s"][0],
-                    "type": format_item["mimeType"],
-                    "quality": format_item["quality"],
-                    "itag": format_item["itag"],
-                    "bitrate": format_item.get("bitrate"),
-                    "is_otf": (format_item.get("type") == otf_type),
-                }
-                for i, format_item in enumerate(formats)
-            ]
+            for i, format_item in enumerate(formats):
+                stream_data[key].append(
+                    {
+                        "url": cipher_url[i]["url"][0],
+                        "s": cipher_url[i]["s"][0],
+                        "type": format_item["mimeType"],
+                        "quality": format_item["quality"],
+                        "itag": format_item["itag"],
+                        "bitrate": format_item.get("bitrate"),
+                        "is_otf": (format_item.get("type") == otf_type),
+                    }
+                )
     else:
         stream_data[key] = [
             {k: unquote(v) for k, v in parse_qsl(i)}

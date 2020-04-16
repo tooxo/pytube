@@ -198,6 +198,8 @@ class YouTube:
                 video_id=self.video_id, watch_url=self.watch_url
             )
 
+        print(self.vid_info_url)
+
         self.vid_info_raw = await request.get(self.vid_info_url)
         if not self.age_restricted:
             self.js_url = extract.js_url(self.watch_html)

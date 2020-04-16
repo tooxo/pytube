@@ -73,8 +73,8 @@ class Playlist(Sequence):
     async def _paginate(
         self
     ) -> AsyncGenerator[List[Tuple[str, str]], None]:
-        """Parse the video links from the page source, yields the /watch?v= part from video link
-        """
+        """Parse the video links from the page source, yields the
+        /watch?v= part from video link"""
         req = self.html
         videos_urls = self._extract_videos(req)
         yield videos_urls
@@ -93,6 +93,7 @@ class Playlist(Sequence):
                 logger.debug("Could not find content_html")
                 return
             videos_urls = self._extract_videos(html)
+            print(len(videos_urls))
             yield videos_urls
 
             load_more_url = self._find_load_more_url(
