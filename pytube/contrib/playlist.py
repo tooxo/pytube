@@ -93,7 +93,6 @@ class Playlist(Sequence):
                 logger.debug("Could not find content_html")
                 return
             videos_urls = self._extract_videos(html)
-            print(len(videos_urls))
             yield videos_urls
 
             load_more_url = self._find_load_more_url(

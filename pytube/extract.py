@@ -197,7 +197,6 @@ def get_ytplayer_config(html: str) -> Any:
         if function_match:
             logger.debug("finished regex search, matched: %s", pattern)
             yt_player_config = function_match.group(1)
-            print(yt_player_config)
             return json.loads(yt_player_config)
 
     raise RegexMatchError(caller="get_ytplayer_config", pattern="config_patterns")
@@ -239,7 +238,6 @@ def apply_signature(config_args: Dict, fmt: str, js: str) -> None:
                 raise LiveStreamError("UNKNOWN")
         # 403 Forbidden fix.
 
-        print("A", json.dumps(stream))
         if "signature" in url or (
             "s" not in stream and ("&sig=" in url or "&lsig=" in url)
         ):
