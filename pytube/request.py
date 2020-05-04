@@ -9,7 +9,7 @@ import aiohttp
 logger = logging.getLogger(__name__)
 
 
-base_headers = {"User-Agent": "Mozilla/5.0"}
+base_headers = {"User-Agent": "Mozilla/5.0", "accept-language": "en-US,en"}
 
 
 async def get(url) -> str:
@@ -21,7 +21,7 @@ async def get(url) -> str:
     :returns:
         UTF-8 encoded string of response
     """
-    async with aiohttp.request("GET", url) as res:
+    async with aiohttp.request("GET", url, headers=base_headers) as res:
         return (await res.read()).decode("utf-8")
 
 
@@ -39,11 +39,10 @@ async def stream(
     while downloaded < file_size:
         stop_pos = min(downloaded + range_size, file_size) - 1
         range_header = f"bytes={downloaded}-{stop_pos}"
-        headers = {
-            **base_headers,
-            "Range": range_header
-        }
-        async with aiohttp.request(method="GET", url=url, headers=headers) as res:
+        headers = {**base_headers, "Range": range_header}
+        async with aiohttp.request(
+            method="GET", url=url, headers=headers
+        ) as res:
             if file_size == range_size:
                 try:
                     content_range = res.headers["Content-Range"]

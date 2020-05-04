@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+import traceback
 from collections import OrderedDict
 from html.parser import HTMLParser
 from typing import Any, Optional, Tuple, List, Dict
@@ -10,7 +11,12 @@ from urllib.parse import quote, parse_qs, unquote, parse_qsl
 from urllib.parse import urlencode
 
 from pytube.cipher import Cipher
-from pytube.exceptions import RegexMatchError, HTMLParseError, LiveStreamError
+from pytube.exceptions import (
+    RegexMatchError,
+    HTMLParseError,
+    LiveStreamError,
+    VideoUnavailable,
+)
 from pytube.helpers import regex_search
 
 logger = logging.getLogger(__name__)
@@ -123,7 +129,9 @@ def video_info_url_age_restricted(video_id: str, embed_html: str) -> str:
     # Here we use ``OrderedDict`` so that the output is consistent between
     # Python 2.7+.
     eurl = f"https://youtube.googleapis.com/v/{video_id}"
-    params = OrderedDict([("video_id", video_id), ("eurl", eurl), ("sts", sts),])
+    params = OrderedDict(
+        [("video_id", video_id), ("eurl", eurl), ("sts", sts),]
+    )
     return _video_info_url(params)
 
 
@@ -199,7 +207,9 @@ def get_ytplayer_config(html: str) -> Any:
             yt_player_config = function_match.group(1)
             return json.loads(yt_player_config)
 
-    raise RegexMatchError(caller="get_ytplayer_config", pattern="config_patterns")
+    raise RegexMatchError(
+        caller="get_ytplayer_config", pattern="config_patterns"
+    )
 
 
 def _get_vid_descr(html: Optional[str]) -> str:
@@ -249,7 +259,9 @@ def apply_signature(config_args: Dict, fmt: str, js: str) -> None:
 
         signature = cipher.get_signature(ciphered_signature=stream["s"])
 
-        logger.debug("finished descrambling signature for itag=%s", stream["itag"])
+        logger.debug(
+            "finished descrambling signature for itag=%s", stream["itag"]
+        )
         # 403 forbidden fix
         stream_manifest[i]["url"] = url + "&sig=" + signature
 
@@ -282,39 +294,45 @@ def apply_descrambler(stream_data: Dict, key: str) -> None:
     ):
         formats = []
         player_response = json.loads(stream_data["player_response"])
-        if "formats" in player_response["streamingData"] :
+        if player_response["playabilityStatus"]["status"] == "UNPLAYABLE":
+            raise VideoUnavailable(player_response["videoDetails"]["videoId"])
+        if "formats" in player_response["streamingData"]:
             formats.extend(player_response["streamingData"]["formats"])
         if "adaptiveFormats" in player_response["streamingData"]:
             formats.extend(player_response["streamingData"]["adaptiveFormats"])
         try:
-            stream_data[key] = []
-            for format_item in formats:
-                stream_data[key].append(
-                    {
-                        "url": format_item["url"],
-                        "type": format_item["mimeType"],
-                        "quality": format_item["quality"],
-                        "itag": format_item["itag"],
-                        "bitrate": format_item.get("bitrate"),
-                        "is_otf": (format_item.get("type") == otf_type),
-                    }
-                )
+            stream_data[key] = [
+                {
+                    "url": format_item["url"],
+                    "type": format_item["mimeType"],
+                    "quality": format_item["quality"],
+                    "itag": format_item["itag"],
+                    "bitrate": format_item.get("bitrate"),
+                    "is_otf": (format_item.get("type") == otf_type),
+                }
+                for format_item in formats
+            ]
         except KeyError:
             cipher_url = [
-                parse_qs(formats[i]["cipher"]) for i, data in enumerate(formats)
-            ]
-            for i, format_item in enumerate(formats):
-                stream_data[key].append(
-                    {
-                        "url": cipher_url[i]["url"][0],
-                        "s": cipher_url[i]["s"][0],
-                        "type": format_item["mimeType"],
-                        "quality": format_item["quality"],
-                        "itag": format_item["itag"],
-                        "bitrate": format_item.get("bitrate"),
-                        "is_otf": (format_item.get("type") == otf_type),
-                    }
+                parse_qs(
+                    formats[i].get(
+                        "cipher", formats[i].get("signatureCipher", None)
+                    )
                 )
+                for i, data in enumerate(formats)
+            ]
+            stream_data[key] = [
+                {
+                    "url": cipher_url[i]["url"][0],
+                    "s": cipher_url[i]["s"][0],
+                    "type": format_item["mimeType"],
+                    "quality": format_item["quality"],
+                    "itag": format_item["itag"],
+                    "bitrate": format_item.get("bitrate"),
+                    "is_otf": (format_item.get("type") == otf_type),
+                }
+                for i, format_item in enumerate(formats)
+            ]
     else:
         stream_data[key] = [
             {k: unquote(v) for k, v in parse_qsl(i)}

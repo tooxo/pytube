@@ -13,6 +13,9 @@ import logging
 from typing import Optional, Dict, List
 from urllib.parse import parse_qsl
 from html import unescape
+
+from pytube.helpers import regex_search
+
 from pytube import extract
 from pytube import request
 from pytube import Stream
@@ -135,6 +138,13 @@ class YouTube:
                 title = title[:index] if index > 0 else title
                 self.player_config_args["title"] = unescape(title)
 
+            if self.title == "YouTube":
+                self.player_config_args["title"] = regex_search(
+                    r'<meta property="og:title" content="(.+)">',
+                    self.watch_html,
+                    1,
+                )
+
         # https://github.com/nficano/pytube/issues/165
         stream_maps = ["url_encoded_fmt_stream_map"]
         if "adaptive_fmts" in self.player_config_args:
@@ -181,9 +191,12 @@ class YouTube:
             raise VideoUnavailable(video_id=self.video_id)
         self.age_restricted = extract.is_age_restricted(self.watch_html)
 
-        if (
-            not self.age_restricted
-            and "This video is private" in self.watch_html
+        if not self.age_restricted and (
+            "This video is private" in self.watch_html
+            or "This video is no longer available because the YouTube account "
+            "associated with this video has been terminated." in self.watch_html
+            or "This video is only available to Music Premium members"
+            in self.watch_html
         ):
             raise VideoUnavailable(video_id=self.video_id)
 
