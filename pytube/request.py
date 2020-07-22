@@ -8,30 +8,35 @@ import aiohttp
 
 logger = logging.getLogger(__name__)
 
-
 base_headers = {"User-Agent": "Mozilla/5.0", "accept-language": "en-US,en"}
 
 
-async def get(url) -> str:
+async def get(url, extra_headers=None) -> str:
     """Send an http GET request.
 
     :param str url:
         The URL to perform the GET request for.
+    :param str extra_headers:
+        Extra headers added to the request
     :rtype: str
     :returns:
         UTF-8 encoded string of response
     """
-    async with aiohttp.request("GET", url, headers=base_headers) as res:
+    if extra_headers is None:
+        extra_headers = {}
+    async with aiohttp.request("GET", url, headers={**base_headers,
+                                                    **extra_headers}) as res:
         return (await res.read()).decode("utf-8")
 
 
 async def stream(
-    url: str, chunk_size: int = 4096, range_size: int = 9437184
+        url: str, chunk_size: int = 4096, range_size: int = 9437184
 ) -> Iterable[bytes]:
     """Read the response in chunks.
     :param str url: The URL to perform the GET request for.
     :param int chunk_size: The size in bytes of each chunk. Defaults to 4KB
-    :param int range_size: The size in bytes of each range request. Defaults to 9MB
+    :param int range_size: The size in bytes of each range request. Defaults
+    to 9MB
     :rtype: Iterable[bytes]
     """
     file_size: int = range_size  # fake filesize to start
@@ -41,7 +46,7 @@ async def stream(
         range_header = f"bytes={downloaded}-{stop_pos}"
         headers = {**base_headers, "Range": range_header}
         async with aiohttp.request(
-            method="GET", url=url, headers=headers
+                method="GET", url=url, headers=headers
         ) as res:
             if file_size == range_size:
                 try:

@@ -39,6 +39,9 @@ class Playlist(Sequence):
         self._video_regex_2 = re.compile(r"<a[A-z0-9 \"-=]+href=\"(/watch\?v="
                                          r"[A-z0-9-_]{11})[A-z0-9 \"\-&_;=]+>"
                                          r"[\s]+([^<\n]+)[\s]+(</a>)?")
+        self._js_regex = re.compile(
+            r"window\[\"ytInitialData\"] = ([^\n]+)"
+        )
         self._video_urls = []
 
     @classmethod
@@ -58,8 +61,10 @@ class Playlist(Sequence):
         return self
 
     @staticmethod
+    @deprecated("Replaced by _build_continuation_url")
     def _find_load_more_url(req: str) -> Optional[str]:
-        """Given an html page or fragment, returns the "load more" url if found."""
+        """Given an html page or fragment, returns the "load more" url if
+        found."""
         match = re.search(
             r"data-uix-load-more-href=\"(/browse_ajax\?"
             'action_continuation=.*?)"',
@@ -70,43 +75,103 @@ class Playlist(Sequence):
 
         return None
 
+    @staticmethod
+    def _build_continuation_url(continuation: str) -> Tuple[str, dict]:
+        """
+        Returns url, headers
+        """
+        return f"https://www.youtube.com/browse_ajax?ctoken=" \
+               f"{continuation}&continuation={continuation}", \
+               {
+                   "X-YouTube-Client-Name": "1",
+                   "X-YouTube-Client-Version": "2.20200720.00.02",
+               }
+
     async def _paginate(
-        self
+            self
     ) -> AsyncGenerator[List[Tuple[str, str]], None]:
         """Parse the video links from the page source, yields the
         /watch?v= part from video link"""
         req = self.html
-        videos_urls = self._extract_videos(req)
+        videos_urls, continuation = self._extract_videos(
+            self._extract_json(req))
         yield videos_urls
 
         # The above only returns 100 or fewer links
         # Simulating a browser request for the load more link
-        load_more_url = self._find_load_more_url(req)
+        if continuation:
+            load_more_url, headers = self._build_continuation_url(
+                continuation)
+        else:
+            load_more_url, headers = None, None
 
-        while load_more_url:  # there is an url found
+        while load_more_url and headers:  # there is an url found
             logger.debug("load more url: %s", load_more_url)
-            req = await request.get(load_more_url)
-            load_more = json.loads(req)
-            try:
-                html = load_more["content_html"]
-            except KeyError:
-                logger.debug("Could not find content_html")
-                return
-            videos_urls = self._extract_videos(html)
+            req = await request.get(load_more_url, extra_headers=headers)
+            videos_urls, continuation = self._extract_videos(req)
             yield videos_urls
 
-            load_more_url = self._find_load_more_url(
-                load_more["load_more_widget_html"]
-            )
+            if continuation:
+                load_more_url, headers = self._build_continuation_url(
+                    continuation)
+            else:
+                load_more_url, headers = None, None
 
         return
 
-    def _extract_videos(self, html: str) -> List[Tuple[str, str]]:
+    def _extract_videos_old(self, html: str) -> List[Tuple[str, str]]:
         matches = self._video_regex_2.findall(html)
         _list: List[Tuple[str, str]] = []
         for match in matches:
             _list.append((self._video_url(match[0]), match[1]))
         return uniqueify(_list)
+
+    @staticmethod
+    def _extract_videos(raw_json: str) -> Tuple[
+        List[Tuple[str, str]], Optional[str]]:
+        """
+        @returns: Tuple[Tuple[endpoint, title], Continuation[Optional]]
+        """
+        initial_data = json.loads(raw_json)
+        try:
+            important_content = \
+                initial_data["contents"]["twoColumnBrowseResultsRenderer"][
+                    "tabs"][
+                    0][
+                    "tabRenderer"]["content"]["sectionListRenderer"][
+                    "contents"][0][
+                    "itemSectionRenderer"]["contents"][0][
+                    "playlistVideoListRenderer"]
+        except (KeyError, IndexError, TypeError):
+            try:
+                important_content = \
+                    initial_data[1]["response"][
+                        "continuationContents"][
+                        "playlistVideoListContinuation"]
+            except (KeyError, IndexError, TypeError) as p:
+                print(p)
+                return [], None
+        videos = important_content["contents"]
+        try:
+            continuation = \
+                important_content["continuations"][0]["nextContinuationData"][
+                    "continuation"]
+        except (KeyError, IndexError):
+            continuation = None
+
+        return uniqueify(
+            list(
+                map(
+                    lambda x: (
+                        f"/watch?id={x['playlistVideoRenderer']['videoId']}",
+                        x["playlistVideoRenderer"]["title"]["simpleText"]),
+                    videos
+                )
+            )
+        ), continuation
+
+    def _extract_json(self, html: str) -> str:
+        return self._js_regex.search(html).group(1)[0:-1]
 
     async def _fill_video_urls(self) -> None:
         """Complete links of all the videos in playlist
@@ -126,7 +191,8 @@ class Playlist(Sequence):
         """
         return self._video_urls
 
-    def __getitem__(self, i: Union[slice, int]) -> Union[Tuple[str, str], List[Tuple[str, str]]]:
+    def __getitem__(self, i: Union[slice, int]) -> Union[
+        Tuple[str, str], List[Tuple[str, str]]]:
         return self.video_urls[i]
 
     def __len__(self) -> int:
