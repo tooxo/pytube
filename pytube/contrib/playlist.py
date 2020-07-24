@@ -182,9 +182,8 @@ class Playlist(Sequence):
         """
         async for page in self._paginate():
             for video in page:
-                video[0] = "https://youtube.com" + video[0]
                 self._video_urls.append(
-                    video
+                    ("https://youtube.com" + video[0], video[1])
                 )
 
     @property
