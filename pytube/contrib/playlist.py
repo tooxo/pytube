@@ -164,7 +164,8 @@ class Playlist(Sequence):
                 map(
                     lambda x: (
                         f"/watch?id={x['playlistVideoRenderer']['videoId']}",
-                        x["playlistVideoRenderer"]["title"]["simpleText"]),
+                        x["playlistVideoRenderer"]["title"].get("simpleText",
+                                                                "")),
                     videos
                 )
             )
