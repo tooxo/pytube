@@ -163,7 +163,7 @@ class Playlist(Sequence):
             list(
                 map(
                     lambda x: (
-                        f"/watch?id={x['playlistVideoRenderer']['videoId']}",
+                        f"/watch?v={x['playlistVideoRenderer']['videoId']}",
                         x["playlistVideoRenderer"]["title"].get("simpleText",
                                                                 "")),
                     videos
@@ -182,6 +182,7 @@ class Playlist(Sequence):
         """
         async for page in self._paginate():
             for video in page:
+                video[0] = "https://youtube.com" + video[0]
                 self._video_urls.append(
                     video
                 )
