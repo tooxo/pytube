@@ -130,7 +130,7 @@ def video_info_url_age_restricted(video_id: str, embed_html: str) -> str:
     # Python 2.7+.
     eurl = f"https://youtube.googleapis.com/v/{video_id}"
     params = OrderedDict(
-        [("video_id", video_id), ("eurl", eurl), ("sts", sts),]
+        [("video_id", video_id), ("eurl", eurl), ("sts", sts), ]
     )
     return _video_info_url(params)
 
@@ -148,8 +148,13 @@ def js_url(html: str) -> str:
     :param str html:
         The html contents of the watch page.
     """
-    base_js = get_ytplayer_config(html)["assets"]["js"]
-    return "https://youtube.com" + base_js
+    player_config = get_ytplayer_config(html)
+    if "assets" in player_config:
+        base_js = player_config["assets"]["js"]
+        return "https://youtube.com" + base_js
+    context_config = get_ytplayer_context_config(html)
+    return "https://youtube.com" + context_config["jsUrl"]
+    # the context config needs to be retrieved
 
 
 def mime_type_codec(mime_type_codec: str) -> Tuple[str, List[str]]:
@@ -193,10 +198,12 @@ def get_ytplayer_config(html: str) -> Any:
         Substring of the html containing the encoded manifest data.
     """
     config_patterns = [
-        r";ytplayer\.config\s*=\s*({.*?});",
         r";ytplayer\.config\s*=\s*({.+?});ytplayer",
-        r";yt\.setConfig\(\{'PLAYER_CONFIG':\s*({.*})}\);",
-        r";yt\.setConfig\(\{'PLAYER_CONFIG':\s*({.*})(,'EXPERIMENT_FLAGS'|;)",  # noqa: E501
+        r";ytplayer\.config\s*=\s*({.*?});\(function"
+        r";ytplayer\.config\s*=\s*({.*?});",
+        r";yt\.setConfig\(\{'PLAYER_CONFIG':\s*(\{.*})}\);",
+        r";yt\.setConfig\(\{'PLAYER_CONFIG':\s*(\{.*})(,'EXPERIMENT_FLAGS'|;)",
+        # noqa: E501
     ]
     logger.debug("finding initial function name")
     for pattern in config_patterns:
@@ -209,6 +216,25 @@ def get_ytplayer_config(html: str) -> Any:
 
     raise RegexMatchError(
         caller="get_ytplayer_config", pattern="config_patterns"
+    )
+
+
+def get_ytplayer_context_config(html: str) -> dict:
+    config_patterns = [
+        r"ytplayer\.web_player_context_config\s=\s({.*});\(function"
+    ]
+
+    logger.debug("finding context config")
+    for pattern in config_patterns:
+        regex = re.compile(pattern)
+        function_match = regex.search(html)
+        if function_match:
+            logger.debug("finished regex search, matched: %s", pattern)
+            yt_player_config = function_match.group(1)
+            return json.loads(yt_player_config)
+
+    raise RegexMatchError(
+        caller="get_ytplayer_context_config", pattern="context_config_patterns"
     )
 
 
@@ -241,15 +267,15 @@ def apply_signature(config_args: Dict, fmt: str, js: str) -> None:
         except KeyError:
             live_stream = (
                 json.loads(config_args["player_response"])
-                .get("playabilityStatus", {},)
-                .get("liveStreamability")
+                    .get("playabilityStatus", {}, )
+                    .get("liveStreamability")
             )
             if live_stream:
                 raise LiveStreamError("UNKNOWN")
         # 403 Forbidden fix.
 
         if "signature" in url or (
-            "s" not in stream and ("&sig=" in url or "&lsig=" in url)
+                "s" not in stream and ("&sig=" in url or "&lsig=" in url)
         ):
             # For certain videos, YouTube will just provide them pre-signed, in
             # which case there's no real magic to download them and we can skip
@@ -290,7 +316,7 @@ def apply_descrambler(stream_data: Dict, key: str) -> None:
     otf_type = "FORMAT_STREAM_TYPE_OTF"
 
     if key == "url_encoded_fmt_stream_map" and not stream_data.get(
-        "url_encoded_fmt_stream_map"
+            "url_encoded_fmt_stream_map"
     ):
         formats = []
         player_response = json.loads(stream_data["player_response"])

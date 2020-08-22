@@ -197,8 +197,8 @@ class YouTube:
             "associated with this video has been terminated." in self.watch_html
             or "This video is only available to Music Premium members"
             in self.watch_html
-            or " This video is no longer available due to a copyright claim by "
-            "a third party." in self.watch_html
+            or "This video is no longer available due to a copyright claim by"
+            in self.watch_html
         ):
             raise VideoUnavailable(video_id=self.video_id)
 
