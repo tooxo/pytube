@@ -203,6 +203,7 @@ def get_ytplayer_config(html: str) -> Any:
         r";ytplayer\.config\s*=\s*({.*?});",
         r";yt\.setConfig\(\{'PLAYER_CONFIG':\s*(\{.*})}\);",
         r";yt\.setConfig\(\{'PLAYER_CONFIG':\s*(\{.*})(,'EXPERIMENT_FLAGS'|;)",
+        r"<script\s?>yt\.setConfig\({.+'PLAYER_CONFIG':\s*({.+}})}\);yt"
         # noqa: E501
     ]
     logger.debug("finding initial function name")
